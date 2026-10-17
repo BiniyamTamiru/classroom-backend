@@ -1,0 +1,63 @@
+openapi: 3.0.3
+
+info:
+  title: Classroom API
+  description: REST API for managing classroom subjects
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+
+paths:
+  /subjects:
+    get:
+      summary: Get all subjects
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+
+        - name: search
+          in: query
+          schema:
+            type: string
+
+        - name: department
+          in: query
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Subjects retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        code:
+                          type: string
+                        description:
+                          type: string
+                        department:
+                          type: string
+
+        "500":
+          description: Internal server error
