@@ -7,6 +7,7 @@ import {
     eq,
     sql,
     desc,
+    type SQL,
 } from "drizzle-orm";
 
 import { subjects, departments } from "../db/schema/index.js";
@@ -14,7 +15,7 @@ import { db } from "../db/index.js";
 
 const router = express.Router();
 
-// Get all subjects with optional search filtering and pagination
+// GET all subjects with search, department filtering, and pagination
 router.get("/", async (req, res) => {
     try {
         const {
@@ -24,27 +25,34 @@ router.get("/", async (req, res) => {
             limit = "10",
         } = req.query;
 
+        // Pagination
         const currentPage = Math.max(1, Number(page) || 1);
         const limitPerPage = Math.max(1, Number(limit) || 10);
-
         const offset = (currentPage - 1) * limitPerPage;
 
-        const filterConditions = [];
+        // Store filter conditions
+        const filterConditions: SQL[] = [];
 
-        // Search by subject name or subject code
-        if (search) {
+        // Search by subject name, code, or description
+        if (typeof search === "string" && search.trim() !== "") {
+            const searchTerm = `%${search.trim()}%`;
+
             filterConditions.push(
                 or(
-                    ilike(subjects.name, `%${search}%`),
-                    ilike(subjects.code, `%${search}%`)
-                )
+                    ilike(subjects.name, searchTerm),
+                    ilike(subjects.code, searchTerm),
+                    ilike(subjects.description, searchTerm)
+                )!
             );
         }
 
         // Filter by department name
-        if (department) {
+        if (
+            typeof department === "string" &&
+            department.trim() !== ""
+        ) {
             filterConditions.push(
-                ilike(departments.name, `%${department}%`)
+                ilike(departments.name, `%${department.trim()}%`)
             );
         }
 
@@ -57,7 +65,7 @@ router.get("/", async (req, res) => {
         // Count matching subjects
         const countResult = await db
             .select({
-                count: sql`count(*)::int`,
+                count: sql<number>`count(*)::int`,
             })
             .from(subjects)
             .leftJoin(
@@ -86,7 +94,7 @@ router.get("/", async (req, res) => {
             .limit(limitPerPage)
             .offset(offset);
 
-        // Send response
+        // Return response
         res.status(200).json({
             data: subjectList,
             pagination: {
@@ -96,8 +104,8 @@ router.get("/", async (req, res) => {
                 totalPages: Math.ceil(totalCount / limitPerPage),
             },
         });
-    } catch (e) {
-        console.error("GET /subjects error:", e);
+    } catch (error) {
+        console.error("GET /subjects error:", error);
 
         res.status(500).json({
             error: "Failed to get subjects",
