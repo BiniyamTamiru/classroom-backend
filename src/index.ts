@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import subjectRouter from "./routes/subjects.js";
+import security_Middleware from "./middleware/security.js";
 
 const app = express();
 const port = 8000;
@@ -15,6 +16,8 @@ app.use(
 );
 
 app.use(express.json());
+
+app.use(security_Middleware);
 
 
 app.use("/api/subjects", subjectRouter);
