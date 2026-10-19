@@ -19,6 +19,7 @@ const timeStamps = {
 		.$onUpdate(() => new Date()),
 };
 
+
 export const user = pgTable("user", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),
@@ -26,7 +27,8 @@ export const user = pgTable("user", {
 	emailVerified: boolean("email_verified").notNull().default(false),
 	image: text("image"),
 	role: roleEnum("role").notNull().default("student"),
-	imageCldPubId: text("image_cld_pub_id"),
+	imageCldpubId: text("imageCldpubId"),
+
 	...timeStamps,
 });
 

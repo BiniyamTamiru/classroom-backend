@@ -1,14 +1,19 @@
 import type { Request, Response, NextFunction } from "express";
 import aj from "../config/arcjet.js";
+import { type ArcjetNodeRequest, slidingWindow } from "@arcjet/node";
 
-import { ArcjetNodeRequest, slidingWindow } from "@arcjet/node";
+type RateLimitRole = "admin" | "teacher" | "student" | "guest";
 
 const security_Middleware = async (
     req: Request,
     res: Response,
     next: NextFunction
+
 ) => {
-    if (process.env.NODE_ENV === "test") return next();
+    if (process.env.NODE_ENV === "test") {
+        return next();
+    }
+
 
     try {
         const role: RateLimitRole = req.user?.role ?? "guest";
@@ -25,7 +30,8 @@ const security_Middleware = async (
             case "teacher":
             case "student":
                 limit = 10;
-                message = "User request limit exceeded (10 per minute). Please wait.";
+                message =
+                    "User request limit exceeded (10 per minute). Please wait.";
                 break;
 
             default:
@@ -46,15 +52,40 @@ const security_Middleware = async (
         const arcjetRequest: ArcjetNodeRequest = {
             headers: req.headers,
             method: req.method,
-            url: req.originalUrl ?? req.url,
+            url: req.originalUrl || req.url,
             socket: {
                 remoteAddress:
                     req.socket.remoteAddress ?? req.ip ?? "0.0.0.0",
             },
         };
 
+        // Evaluate the request with Arcjet
         const decision = await client.protect(arcjetRequest);
 
+        // TEMPORARY DEBUG LOGS
+        console.log("Arcjet conclusion:", decision.conclusion);
+        console.log("Arcjet reason:", decision.reason);
+
+        for (const result of decision.results) {
+            console.log({
+                conclusion: result.conclusion,
+                state: result.state,
+                reason: result.reason,
+            });
+        }
+
+        // Do not continue when Arcjet evaluation fails
+        if (decision.isErrored()) {
+            console.error("Arcjet decision error:", decision.reason);
+
+            return res.status(503).json({
+                error: "security_service_unavailable",
+                message:
+                    "Security verification is temporarily unavailable.",
+            });
+        }
+
+        // Block requests identified as disallowed bots
         if (decision.isDenied() && decision.reason.isBot()) {
             return res.status(403).json({
                 error: "forbidden",
@@ -62,6 +93,7 @@ const security_Middleware = async (
             });
         }
 
+        // Block requests denied by Shield
         if (decision.isDenied() && decision.reason.isShield()) {
             return res.status(403).json({
                 error: "forbidden",
@@ -69,6 +101,7 @@ const security_Middleware = async (
             });
         }
 
+        // Block requests that exceed the rate limit
         if (decision.isDenied() && decision.reason.isRateLimit()) {
             return res.status(429).json({
                 error: "too_many_requests",
@@ -76,13 +109,22 @@ const security_Middleware = async (
             });
         }
 
-        next();
-    } catch (e) {
-        console.error("Arcjet middleware error:", e);
+        // Block any other denied request
+        if (decision.isDenied()) {
+            return res.status(403).json({
+                error: "forbidden",
+                message: "Request blocked.",
+            });
+        }
 
-        return res.status(500).json({
-            error: "internal_error",
-            message: "Something went wrong with the security middleware.",
+        // Allow the request to continue
+        return next();
+    } catch (error) {
+        console.error("Arcjet middleware error:", error);
+
+        return res.status(503).json({
+            error: "security_service_unavailable",
+            message: "Security verification is temporarily unavailable.",
         });
     }
 };

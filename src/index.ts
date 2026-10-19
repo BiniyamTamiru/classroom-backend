@@ -1,8 +1,14 @@
+import AgentAPI from "apminsight";
+AgentAPI.config()
+
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import subjectRouter from "./routes/subjects.js";
 import security_Middleware from "./middleware/security.js";
+import {toNodeHandler} from "better-auth/node";
+import {auth} from "./lib/auth.js";
 
 const app = express();
 const port = 8000;
@@ -13,7 +19,10 @@ app.use(
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
     })
+
 );
+
+app.all('/api/auth/*splat', toNodeHandler(auth));
 
 app.use(express.json());
 

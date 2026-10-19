@@ -24,7 +24,7 @@ const aj = arcjet({
         // Rate limit: maximum 5 requests per 2 seconds
         slidingWindow({
             mode: "LIVE",
-            interval: "2s",
+            interval: "10s",
             max: 5,
         }),
     ],
