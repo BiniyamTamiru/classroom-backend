@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { index } from "./db/index.js";
+import { db } from "./db/index.js";
 import { departments } from "./db/schema/index.js";
 
 async function main() {
@@ -8,7 +8,7 @@ async function main() {
   try {
     console.log("Performing CRUD operations...");
 
-    const [newDepartment] = await index
+    const [newDepartment] = await db
         .insert(departments)
         .values({
           code: `CS-${Date.now()}`,
@@ -24,7 +24,7 @@ async function main() {
     createdDepartmentId = newDepartment.id;
     console.log("CREATE:", newDepartment);
 
-    const [foundDepartment] = await index
+    const [foundDepartment] = await db
         .select()
         .from(departments)
         .where(eq(departments.id, newDepartment.id));
@@ -35,7 +35,7 @@ async function main() {
 
     console.log("READ:", foundDepartment);
 
-    const [updatedDepartment] = await index
+    const [updatedDepartment] = await db
         .update(departments)
         .set({ name: "Software Engineering" })
         .where(eq(departments.id, newDepartment.id))
@@ -47,7 +47,7 @@ async function main() {
 
     console.log("UPDATE:", updatedDepartment);
 
-    await index
+    await db
         .delete(departments)
         .where(eq(departments.id, newDepartment.id));
 
@@ -56,7 +56,7 @@ async function main() {
     console.log("CRUD operations completed successfully.");
   } finally {
     if (createdDepartmentId !== undefined) {
-      await index
+      await db
           .delete(departments)
           .where(eq(departments.id, createdDepartmentId));
     }
