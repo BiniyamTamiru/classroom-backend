@@ -11,7 +11,7 @@ import {toNodeHandler} from "better-auth/node";
 import {auth} from "./lib/auth.js";
 
 const app = express();
-const port = 8000;
+const port = Number(process.env.PORT) || 8000;
 
 app.use(
     cors({
@@ -35,7 +35,7 @@ app.get("/", (_req, res) => {
   res.send("Classroom API is running.");
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-  console.log(`Allowed frontend origin: ${process.env.FRONTEND_URL}`);
+app.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`Allowed frontend origin: ${process.env.FRONTEND_URL}`);
 });
