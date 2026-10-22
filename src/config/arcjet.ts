@@ -22,10 +22,11 @@ const aj = arcjet({
         }),
 
         // Rate limit: maximum 5 requests per 2 seconds
+
         slidingWindow({
             mode: "LIVE",
             interval: "10s",
-            max: 5,
+            max: process.env.NODE_ENV === "production" ? 5 : 100,
         }),
     ],
 });

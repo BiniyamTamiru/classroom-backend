@@ -1,16 +1,18 @@
 import AgentAPI from "apminsight";
 AgentAPI.config()
-
-
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import subjectRouter from "./routes/subjects.js";
+import userRouter from "./routes/users.js";
+import classesRouter from "./routes/classes.js";
 import security_Middleware from "./middleware/security.js";
 import {toNodeHandler} from "better-auth/node";
 import {auth} from "./lib/auth.js";
 
 const app = express();
+
+app.set("trust proxy", true);
 const port = Number(process.env.PORT) || 8000;
 
 app.use(
@@ -30,6 +32,8 @@ app.use(security_Middleware);
 
 
 app.use("/api/subjects", subjectRouter);
+app.use("/api/users", userRouter);
+app.use("/api/classes", classesRouter);
 
 app.get("/", (_req, res) => {
   res.send("Classroom API is running.");
