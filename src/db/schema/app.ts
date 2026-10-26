@@ -2,7 +2,6 @@ import { integer, index, pgEnum, pgTable, text, uniqueIndex, varchar, timestamp 
 import { relations } from "drizzle-orm";
 import { user } from "./auth.js";
 
-
 const timeStamps = {
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
@@ -54,7 +53,10 @@ export const classes = pgTable(
 
         name: varchar("name", { length: 255 }).notNull(),
 
+        capacity: integer("capacity").default(0), // Added capacity
+
         bannerUrl: text("banner_url"),
+        bannerCldPubId: text("banner_cld_pub_id"), // Added Cloudinary Public ID column
 
         status: classStatusEnum("status").notNull().default("active"),
 
