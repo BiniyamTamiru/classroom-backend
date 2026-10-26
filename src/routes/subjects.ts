@@ -13,6 +13,7 @@ import {
 import { subjects, departments } from "../db/schema/index.js";
 import { db } from "../db/index.js";
 
+
 const router = express.Router();
 
 // GET all subjects with search, department filtering, and pagination
@@ -61,6 +62,8 @@ router.get("/", async (req, res) => {
             filterConditions.length > 0
                 ? and(...filterConditions)
                 : undefined;
+
+
 
         // Count matching subjects
         const countResult = await db
