@@ -52,6 +52,7 @@ export const classes = pgTable(
         inviteCode: varchar("invite_code", { length: 255 }).notNull(),
 
         name: varchar("name", { length: 255 }).notNull(),
+        description: text("description"),
 
         capacity: integer("capacity").default(0), // Added capacity
 
@@ -91,9 +92,11 @@ export const enrollments = pgTable(
     ],
 );
 
+
 export const departmentRelations = relations(departments, ({ many }) => ({
     subjects: many(subjects),
 }));
+
 
 export const subjectRelations = relations(subjects, ({ one, many }) => ({
     department: one(departments, {
@@ -130,6 +133,8 @@ export const appUserRelations = relations(user, ({ many }) => ({
     taughtClasses: many(classes),
     enrollments: many(enrollments),
 }));
+
+
 
 export type department = typeof departments.$inferSelect;
 export type newDepartment = typeof departments.$inferInsert;

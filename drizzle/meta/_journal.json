@@ -15,6 +15,13 @@
       "when": 1792226176350,
       "tag": "0001_grey_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793126092905,
+      "tag": "0002_bizarre_nightcrawler",
+      "breakpoints": true
     }
   ]
 }

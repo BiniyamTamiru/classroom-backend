@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post('/', async (req: Request, res: Response) => {
     try {
-        const { name, teacherId, subjectId, capacity, status, bannerUrl, bannerCldPubId } = req.body;
+        const {description, name, teacherId, subjectId, capacity, status, bannerUrl, bannerCldPubId } = req.body;
 
         const inviteCode = Math.random().toString(36).substring(2, 9);
 
@@ -15,6 +15,7 @@ router.post('/', async (req: Request, res: Response) => {
             .insert(classes)
             .values({
                 name,
+                description,
                 teacherId,
                 subjectId,
                 capacity: capacity ? Number(capacity) : 0,
@@ -36,6 +37,42 @@ router.post('/', async (req: Request, res: Response) => {
         return res.status(500).json({ error: e.message });
     }
 });
+
+// get class detail with teacher,subject, and department
+
+router.get('/:id',async (req,res) =>{
+    const classId = Number(req.params.id);
+
+    if (!Number.isFinite(classId)) return res.status(404).json({ error:"No class found" });
+
+    const [classDetails]= await db
+        .select({
+            ...getTableColumns(classes),
+            subject:{
+                ...getTableColumns(subjects),
+
+            },
+             department: {
+                ...getTableColumns(departments),
+
+             },
+            teacher :{
+                ...getTableColumns(user)
+            }
+        })
+        .from(classes)
+        .leftJoin(subjects, eq(classes.subjectId,subjects.id))
+        .leftJoin(user,eq(classes.teacherId,user.id))
+        .leftJoin(departments, eq(classes.subjectId,departments.id))
+        .where(eq(classes.id,classId))
+
+    if(!classDetails) return res.status(404).json({ error:"No class found" });
+
+    res.status(200).json({ data: classDetails});
+
+
+
+})
 
 router.get("/", async (req: Request, res: Response) => {
     try {
