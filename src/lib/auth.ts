@@ -21,7 +21,6 @@ export const auth = betterAuth({
                 type: "string",
                 required: true,
                 defaultValue: "student",
-                input: true,
             },
             imageCldpubId: {
                 type: "string",

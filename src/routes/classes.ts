@@ -1,15 +1,59 @@
+
 import express, { Request, Response } from "express";
 import { db } from "../db/index.js";
-import { classes, departments, subjects, user } from "../db/schema/index.js";
-import { and, desc, eq, getTableColumns, ilike, or, sql, SQL } from "drizzle-orm";
+import {
+    classes,
+    departments,
+    enrollments,
+    subjects,
+    user,
+} from "../db/schema/index.js";
+import {
+    and,
+    desc,
+    eq,
+    getTableColumns,
+    ilike,
+    or,
+    sql,
+    SQL,
+} from "drizzle-orm";
+import { fromNodeHeaders } from "better-auth/node";
+import { auth } from "../lib/auth.js";
 
 const router = express.Router();
 
-router.post('/', async (req: Request, res: Response) => {
-    try {
-        const {description, name, teacherId, subjectId, capacity, status, bannerUrl, bannerCldPubId } = req.body;
+// Get authenticated session
+async function getSession(req: Request) {
+    return auth.api.getSession({
+        headers: fromNodeHeaders(req.headers),
+        query: { disableCookieCache: true },
+    });
+}
 
-        const inviteCode = Math.random().toString(36).substring(2, 9);
+// 1. CREATE CLASS
+router.post("/", async (req: Request, res: Response) => {
+    try {
+        const {
+            description,
+            name,
+            teacherId,
+            subjectId,
+            capacity,
+            status,
+            bannerUrl,
+            bannerCldPubId,
+        } = req.body;
+
+        console.log("CREATE CLASS REQUEST:", {
+            name,
+            teacherId,
+            subjectId,
+        });
+
+        const inviteCode = Math.random()
+            .toString(36)
+            .substring(2, 9);
 
         const [createdClass] = await db
             .insert(classes)
@@ -30,53 +74,148 @@ router.post('/', async (req: Request, res: Response) => {
             throw new Error("Failed to create class");
         }
 
-        return res.status(201).json({ success: true, data: createdClass });
+        console.log("CLASS CREATED:", createdClass);
 
-    } catch (e: any) {
-        console.error(`POST /classes error: ${e.message}`);
-        return res.status(500).json({ error: e.message });
+        return res.status(201).json({
+            success: true,
+            data: createdClass,
+        });
+    } catch (error) {
+        console.error("POST /classes error:", error);
+
+        return res.status(500).json({
+            error: "Failed to create class",
+        });
     }
 });
 
-// get class detail with teacher,subject, and department
+// 2. GET TEACHER CLASSES
+// This route MUST be before GET /:id
+router.get("/teacher-classes", async (req: Request, res: Response) => {
+    try {
+        const session = await getSession(req);
 
-router.get('/:id',async (req,res) =>{
-    const classId = Number(req.params.id);
+        if (!session) {
+            return res.status(401).json({
+                error: "unauthorized",
+                message: "Please sign in.",
+            });
+        }
 
-    if (!Number.isFinite(classId)) return res.status(404).json({ error:"No class found" });
+        if (session.user.role !== "teacher") {
+            return res.status(403).json({
+                error: "forbidden",
+                message: "Only teachers can access this endpoint.",
+            });
+        }
 
-    const [classDetails]= await db
-        .select({
-            ...getTableColumns(classes),
-            subject:{
-                ...getTableColumns(subjects),
+        const search =
+            typeof req.query.search === "string"
+                ? req.query.search.trim()
+                : "";
 
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(
+            100,
+            Math.max(1, Number(req.query.limit) || 10)
+        );
+
+        const offset = (page - 1) * limit;
+
+        const conditions: SQL[] = [
+            eq(classes.teacherId, session.user.id),
+        ];
+
+        if (search) {
+            conditions.push(
+                or(
+                    ilike(classes.name, `%${search}%`),
+                    ilike(classes.inviteCode, `%${search}%`)
+                )!
+            );
+        }
+
+        const whereClause = and(...conditions);
+
+        const countResult = await db
+            .select({
+                count: sql<number>`count(*)::int`,
+            })
+            .from(classes)
+            .where(whereClause);
+
+        const total = countResult[0]?.count ?? 0;
+
+        const teacherClasses = await db
+            .select({
+                id: classes.id,
+                name: classes.name,
+                status: classes.status,
+
+                subjectName: subjects.name,
+                subjectCode: subjects.code,
+
+                departmentName: departments.name,
+
+                enrolledStudents: sql<number>`
+                    (
+                        SELECT count(*)::int
+                        FROM ${enrollments}
+                        WHERE ${enrollments.classId} = ${classes.id}
+                    )
+                `,
+            })
+            .from(classes)
+            .leftJoin(
+                subjects,
+                eq(classes.subjectId, subjects.id)
+            )
+            .leftJoin(
+                departments,
+                eq(subjects.departmentId, departments.id)
+            )
+            .where(whereClause)
+            .orderBy(desc(classes.id))
+            .limit(limit)
+            .offset(offset);
+
+        return res.status(200).json({
+            data: teacherClasses,
+            total,
+            pagination: {
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
             },
-             department: {
-                ...getTableColumns(departments),
+        });
+    } catch (error) {
+        console.error("GET /classes/teacher-classes error:", error);
 
-             },
-            teacher :{
-                ...getTableColumns(user)
-            }
-        })
-        .from(classes)
-        .leftJoin(subjects, eq(classes.subjectId,subjects.id))
-        .leftJoin(user,eq(classes.teacherId,user.id))
-        .leftJoin(departments, eq(classes.subjectId,departments.id))
-        .where(eq(classes.id,classId))
+        return res.status(500).json({
+            error: "Failed to get teacher classes",
+        });
+    }
+});
 
-    if(!classDetails) return res.status(404).json({ error:"No class found" });
-
-    res.status(200).json({ data: classDetails});
-
-
-
-})
-
+// 3. GET ALL CLASSES
 router.get("/", async (req: Request, res: Response) => {
     try {
-        console.log("RECEIVED REQ.QUERY:", req.query);
+        const session = await getSession(req);
+
+        if (!session) {
+            return res.status(401).json({
+                error: "unauthorized",
+                message: "Please sign in to view classes.",
+            });
+        }
+
+        if (!["admin", "teacher", "student"].includes(session.user.role)) {
+            return res.status(403).json({
+                error: "forbidden",
+                message: "Your account cannot view classes.",
+            });
+        }
+
         let {
             search,
             subject,
@@ -86,45 +225,64 @@ router.get("/", async (req: Request, res: Response) => {
             filters,
         } = req.query as Record<string, any>;
 
-        // Parse filters if sent as a JSON string or array by Refine's data provider
         if (typeof filters === "string") {
             try {
                 filters = JSON.parse(filters);
-            } catch (e) {
-                // ignore parse errors
+            } catch {
+                filters = [];
             }
         }
 
-        // for selector
         if (Array.isArray(filters)) {
-            for (const f of filters) {
-                // Catch both 'name' (from your frontend search input) and 'search'
-                if (f.field === "name" || f.field === "search") {
-                    search = f.value;
+            for (const filter of filters) {
+                if (
+                    filter.field === "name" ||
+                    filter.field === "search"
+                ) {
+                    search = filter.value;
                 }
-                if (f.field === "subject") {
-                    subject = f.value;
+
+                if (filter.field === "subject") {
+                    subject = filter.value;
                 }
-                if (f.field === "teacher") {
-                    teacher = f.value;
+
+                if (filter.field === "teacher") {
+                    teacher = filter.value;
                 }
             }
         }
 
-        // Pagination
         const currentPage = Math.max(1, Number(page) || 1);
+
         const limitPerPage = Math.min(
             100,
             Math.max(1, Number(limit) || 10)
         );
-        const offset = (currentPage - 1) * limitPerPage; // Fixed offset calculation
 
-        // Store filter conditions
+        const offset = (currentPage - 1) * limitPerPage;
+
         const filterConditions: SQL[] = [];
 
-        // 1. Search by class name or invite code
-        if (typeof search === "string" && search.trim() !== "") {
+        if (session.user.role === "teacher") {
+            filterConditions.push(
+                eq(classes.teacherId, session.user.id)
+            );
+        }
+
+        if (session.user.role === "student") {
+            filterConditions.push(
+                sql`exists (
+                    select 1
+                    from ${enrollments}
+                    where ${enrollments.classId} = ${classes.id}
+                    and ${enrollments.studentId} = ${session.user.id}
+                )`
+            );
+        }
+
+        if (typeof search === "string" && search.trim()) {
             const searchTerm = `%${search.trim()}%`;
+
             filterConditions.push(
                 or(
                     ilike(classes.name, searchTerm),
@@ -133,19 +291,31 @@ router.get("/", async (req: Request, res: Response) => {
             );
         }
 
-        // 2. Filter by Subject (handles numeric ID or name)
-        if (typeof subject === "string" && subject.trim() !== "" && subject.trim() !== "all") {
+        if (
+            typeof subject === "string" &&
+            subject.trim() &&
+            subject !== "all"
+        ) {
             const trimmedSubject = subject.trim();
+
             if (!isNaN(Number(trimmedSubject))) {
-                filterConditions.push(eq(classes.subjectId, Number(trimmedSubject)));
+                filterConditions.push(
+                    eq(classes.subjectId, Number(trimmedSubject))
+                );
             } else {
-                filterConditions.push(ilike(subjects.name, `%${trimmedSubject}%`));
+                filterConditions.push(
+                    ilike(subjects.name, `%${trimmedSubject}%`)
+                );
             }
         }
 
-        // 3. Filter by Teacher (handles ID or name)
-        if (typeof teacher === "string" && teacher.trim() !== "" && teacher.trim() !== "all") {
+        if (
+            typeof teacher === "string" &&
+            teacher.trim() &&
+            teacher !== "all"
+        ) {
             const trimmedTeacher = teacher.trim();
+
             filterConditions.push(
                 or(
                     eq(classes.teacherId, trimmedTeacher),
@@ -154,16 +324,14 @@ router.get("/", async (req: Request, res: Response) => {
             );
         }
 
-        // Combine all filters
         const whereClause =
             filterConditions.length > 0
                 ? and(...filterConditions)
                 : undefined;
 
-        // Count matching classes (Must include joins so filters apply to total count accurately)
         const countResult = await db
             .select({
-                count: sql<number>`count(*)::int`,
+                count: sql<number>`count(distinct ${classes.id})::int`,
             })
             .from(classes)
             .leftJoin(
@@ -178,12 +346,11 @@ router.get("/", async (req: Request, res: Response) => {
 
         const totalCount = countResult[0]?.count ?? 0;
 
-        // Get classes with subject and teacher information safely mapped
         const classList = await db
             .select({
                 ...getTableColumns(classes),
-                subject: subjects, // Pass table object directly to avoid key collisions
-                teacher: user,   // Pass table object directly to avoid key collisions
+                subject: subjects,
+                teacher: user,
             })
             .from(classes)
             .leftJoin(
@@ -199,14 +366,16 @@ router.get("/", async (req: Request, res: Response) => {
             .limit(limitPerPage)
             .offset(offset);
 
-        // Return response
         return res.status(200).json({
             data: classList,
+            total: totalCount,
             pagination: {
                 total: totalCount,
                 page: currentPage,
                 limit: limitPerPage,
-                totalPages: Math.ceil(totalCount / limitPerPage),
+                totalPages: Math.ceil(
+                    totalCount / limitPerPage
+                ),
             },
         });
     } catch (error) {
@@ -214,6 +383,173 @@ router.get("/", async (req: Request, res: Response) => {
 
         return res.status(500).json({
             error: "Failed to get classes",
+        });
+    }
+});
+
+// 4. GET CLASS DETAILS
+// Keep this route only ONCE, at the bottom.
+router.get("/:id", async (req: Request, res: Response) => {
+    const classId = Number(req.params.id);
+
+    console.log("REQUESTED CLASS ID:", classId);
+
+    if (!Number.isSafeInteger(classId) || classId < 1) {
+        return res.status(400).json({
+            error: "Invalid class ID",
+        });
+    }
+
+    try {
+        const session = await getSession(req);
+
+        if (!session) {
+            return res.status(401).json({
+                error: "unauthorized",
+                message: "Please sign in to view this class.",
+            });
+        }
+
+        console.log("SESSION USER:", session.user.id);
+        console.log("SESSION ROLE:", session.user.role);
+
+        const [classDetails] = await db
+            .select({
+                id: classes.id,
+                name: classes.name,
+                description: classes.description,
+                status: classes.status,
+                capacity: classes.capacity,
+                inviteCode: classes.inviteCode,
+                bannerUrl: classes.bannerUrl,
+                bannerCldPubId: classes.bannerCldPubId,
+
+                subject: {
+                    id: subjects.id,
+                    name: subjects.name,
+                    code: subjects.code,
+                    description: subjects.description,
+                },
+
+                department: {
+                    id: departments.id,
+                    name: departments.name,
+                    code: departments.code,
+                    description: departments.description,
+                },
+
+                teacher: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    image: user.image,
+                },
+
+                teacherId: classes.teacherId,
+            })
+            .from(classes)
+            .innerJoin(
+                subjects,
+                eq(classes.subjectId, subjects.id)
+            )
+            .innerJoin(
+                departments,
+                eq(subjects.departmentId, departments.id)
+            )
+            .innerJoin(
+                user,
+                eq(classes.teacherId, user.id)
+            )
+            .where(eq(classes.id, classId))
+            .limit(1);
+
+        console.log("CLASS FOUND:", Boolean(classDetails));
+
+        if (!classDetails) {
+            return res.status(404).json({
+                error: "No class found",
+            });
+        }
+
+        const role = session.user.role;
+
+        // Teachers can only view their own classes.
+        if (
+            role === "teacher" &&
+            classDetails.teacherId !== session.user.id
+        ) {
+            return res.status(404).json({
+                error: "No class found",
+            });
+        }
+
+        // Students can only view classes they joined.
+        if (role === "student") {
+            const [enrollment] = await db
+                .select({
+                    id: enrollments.id,
+                })
+                .from(enrollments)
+                .where(
+                    and(
+                        eq(enrollments.classId, classId),
+                        eq(enrollments.studentId, session.user.id)
+                    )
+                )
+                .limit(1);
+
+            if (!enrollment) {
+                return res.status(404).json({
+                    error: "No class found",
+                });
+            }
+        } else if (role !== "teacher" && role !== "admin") {
+            return res.status(403).json({
+                error: "forbidden",
+                message: "Your account cannot view class details.",
+            });
+        }
+
+        // Get enrolled students.
+        const students = await db
+            .select({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                enrolledAt: enrollments.createdAt,
+            })
+            .from(enrollments)
+            .innerJoin(
+                user,
+                eq(enrollments.studentId, user.id)
+            )
+            .where(eq(enrollments.classId, classId));
+
+        const totalEnrollments = students.length;
+
+        // Do not expose the internal teacherId separately.
+        const {
+            teacherId: _teacherId,
+            ...safeClassDetails
+        } = classDetails;
+
+        console.log("ENROLLED STUDENTS:", totalEnrollments);
+
+        return res.status(200).json({
+            data: {
+                ...safeClassDetails,
+                enrolledStudents: totalEnrollments,
+                totalEnrollments,
+                students,
+            },
+        });
+    } catch (error) {
+        console.error("GET /classes/:id error:", error);
+
+        return res.status(500).json({
+            error: "class_fetch_failed",
+            message: "Failed to retrieve class details.",
         });
     }
 });
