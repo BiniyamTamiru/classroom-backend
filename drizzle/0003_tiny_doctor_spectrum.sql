@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "departments_code_lower_unique" ON "departments" USING btree (lower("code"));

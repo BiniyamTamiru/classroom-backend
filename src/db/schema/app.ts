@@ -1,5 +1,5 @@
 import { integer, index, pgEnum, pgTable, text, uniqueIndex, varchar, timestamp } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { user } from "./auth.js";
 
 const timeStamps = {
@@ -12,13 +12,19 @@ const timeStamps = {
 
 export const classStatusEnum = pgEnum("class_status", ["active", "inactive", "archived"]);
 
-export const departments = pgTable("departments", {
-    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-    code: varchar("code", { length: 50 }).notNull(),
-    name: varchar("name", { length: 255 }).notNull(),
-    description: varchar("description", { length: 255 }),
-    ...timeStamps,
-});
+export const departments = pgTable(
+    "departments",
+    {
+        id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+        code: varchar("code", { length: 50 }).notNull(),
+        name: varchar("name", { length: 255 }).notNull(),
+        description: varchar("description", { length: 255 }),
+        ...timeStamps,
+    },
+    (table) => [
+        uniqueIndex("departments_code_lower_unique").on(sql`lower(${table.code})`),
+    ],
+);
 
 export const subjects = pgTable("subjects", {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -34,7 +40,9 @@ export const subjects = pgTable("subjects", {
     description: varchar("description", { length: 255 }),
 
     ...timeStamps,
-});
+}, (table) => [
+    uniqueIndex("subjects_code_lower_unique").on(sql`lower(${table.code})`),
+]);
 
 export const classes = pgTable(
     "classes",
@@ -43,7 +51,7 @@ export const classes = pgTable(
 
         subjectId: integer("subject_id")
             .notNull()
-            .references(() => subjects.id, { onDelete: "cascade" }),
+            .references(() => subjects.id, { onDelete: "restrict" }),
 
         teacherId: text("teacher_id")
             .notNull()
@@ -52,6 +60,7 @@ export const classes = pgTable(
         inviteCode: varchar("invite_code", { length: 255 }).notNull(),
 
         name: varchar("name", { length: 255 }).notNull(),
+        description: text("description"),
 
         capacity: integer("capacity").default(0), // Added capacity
 
@@ -91,9 +100,11 @@ export const enrollments = pgTable(
     ],
 );
 
+
 export const departmentRelations = relations(departments, ({ many }) => ({
     subjects: many(subjects),
 }));
+
 
 export const subjectRelations = relations(subjects, ({ one, many }) => ({
     department: one(departments, {
@@ -131,6 +142,8 @@ export const appUserRelations = relations(user, ({ many }) => ({
     enrollments: many(enrollments),
 }));
 
+
+
 export type department = typeof departments.$inferSelect;
 export type newDepartment = typeof departments.$inferInsert;
 
@@ -139,6 +152,7 @@ export type newSubject = typeof subjects.$inferInsert;
 
 export type Class = typeof classes.$inferSelect;
 export type NewClass = typeof classes.$inferInsert;
+
 
 export type Enrollment = typeof enrollments.$inferSelect;
 export type NewEnrollment = typeof enrollments.$inferInsert;

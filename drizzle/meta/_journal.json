@@ -15,6 +15,27 @@
       "when": 1792226176350,
       "tag": "0001_grey_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793126092905,
+      "tag": "0002_bizarre_nightcrawler",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793378707738,
+      "tag": "0003_tiny_doctor_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793433431375,
+      "tag": "0004_old_magus",
+      "breakpoints": true
     }
   ]
 }

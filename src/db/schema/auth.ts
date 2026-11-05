@@ -22,11 +22,13 @@ const timeStamps = {
 
 export const user = pgTable("user", {
 	id: text("id").primaryKey(),
+
 	name: text("name").notNull(),
 	email: text("email").notNull().unique("user_email_unique"),
 	emailVerified: boolean("email_verified").notNull().default(false),
 	image: text("image"),
 	role: roleEnum("role").notNull().default("student"),
+
 	imageCldpubId: text("imageCldpubId"),
 
 	...timeStamps,
